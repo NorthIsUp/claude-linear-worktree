@@ -1,0 +1,9 @@
+query FetchIssue($id: String!) {
+  issue(id: $id) {
+    id
+    identifier
+    title
+    url
+    branchName
+  }
+}
