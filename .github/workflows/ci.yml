@@ -23,6 +23,8 @@ jobs:
           experimental: true
       - name: Install pinned tools
         run: mise install
+      - name: Install clippy + rustfmt
+        run: mise exec -- rustup component add clippy rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: mise exec -- cargo test
       - run: mise exec -- cargo clippy -- -D warnings
