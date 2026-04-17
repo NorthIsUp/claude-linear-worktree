@@ -5,9 +5,17 @@ use anyhow::{anyhow, bail, Context, Result};
 use graphql_client::{GraphQLQuery, Response};
 use reqwest::blocking::Client as HttpClient;
 
-use queries::{fetch_issue, FetchIssue};
+use queries::{fetch_issue, FetchIssue, CreateIssue, create_issue, ListTeams, list_teams};
 
 const DEFAULT_ENDPOINT: &str = "https://api.linear.app/graphql";
+
+/// Team data returned by list_teams.
+#[derive(Debug, Clone)]
+pub struct TeamInfo {
+    pub id: String,
+    pub key: String,
+    pub name: String,
+}
 
 /// Summarized issue data needed by the rest of the app.
 #[derive(Debug, Clone)]
@@ -66,6 +74,36 @@ impl Client {
             }
         }
         resp.data.ok_or_else(|| anyhow!("Linear response had no data"))
+    }
+
+    pub fn list_teams(&self) -> Result<Vec<TeamInfo>> {
+        let data = self.post::<ListTeams>(list_teams::Variables {})?;
+        Ok(data
+            .teams
+            .nodes
+            .into_iter()
+            .map(|n| TeamInfo { id: n.id, key: n.key, name: n.name })
+            .collect())
+    }
+
+    pub fn create_issue(&self, team_id: &str, title: &str) -> Result<IssueInfo> {
+        let data = self.post::<CreateIssue>(create_issue::Variables {
+            team_id: team_id.to_string(),
+            title: title.to_string(),
+        })?;
+        let payload = data.issue_create;
+        if !payload.success {
+            bail!("Linear issueCreate returned success=false");
+        }
+        let issue = payload
+            .issue
+            .ok_or_else(|| anyhow!("Linear issueCreate returned no issue"))?;
+        Ok(IssueInfo {
+            identifier: issue.identifier,
+            title: issue.title,
+            url: issue.url,
+            branch_name: issue.branch_name,
+        })
     }
 
     pub fn fetch_issue(&self, id: &str) -> Result<IssueInfo> {
