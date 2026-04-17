@@ -44,3 +44,7 @@ impl Args {
         <Self as Parser>::parse_from(it)
     }
 }
+
+pub fn normalize_ticket_id(raw: &str) -> String {
+    raw.trim().to_ascii_uppercase()
+}

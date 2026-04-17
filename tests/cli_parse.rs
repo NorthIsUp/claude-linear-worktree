@@ -46,3 +46,20 @@ fn worktree_dir_flag_reads_path() {
     ]);
     assert_eq!(a.worktree_dir.as_deref().and_then(|p| p.to_str()), Some("/tmp/wt"));
 }
+
+use claude_lwt::cli::normalize_ticket_id;
+
+#[test]
+fn normalizes_lowercase_id() {
+    assert_eq!(normalize_ticket_id("abc-123"), "ABC-123");
+}
+
+#[test]
+fn keeps_uppercase_id() {
+    assert_eq!(normalize_ticket_id("ABC-123"), "ABC-123");
+}
+
+#[test]
+fn trims_whitespace() {
+    assert_eq!(normalize_ticket_id("  abc-1 "), "ABC-1");
+}
