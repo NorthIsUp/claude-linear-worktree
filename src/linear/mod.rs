@@ -22,6 +22,7 @@ pub struct TeamInfo {
 pub struct IssueInfo {
     pub identifier: String,
     pub title: String,
+    pub description: Option<String>,
     pub url: String,
     pub branch_name: String,
 }
@@ -91,10 +92,16 @@ impl Client {
             .collect())
     }
 
-    pub fn create_issue(&self, team_id: &str, title: &str) -> Result<IssueInfo> {
+    pub fn create_issue(
+        &self,
+        team_id: &str,
+        title: &str,
+        description: Option<&str>,
+    ) -> Result<IssueInfo> {
         let data = self.post::<CreateIssue>(create_issue::Variables {
             team_id: team_id.to_string(),
             title: title.to_string(),
+            description: description.map(|s| s.to_string()),
         })?;
         let payload = data.issue_create;
         if !payload.success {
@@ -106,6 +113,7 @@ impl Client {
         Ok(IssueInfo {
             identifier: issue.identifier,
             title: issue.title,
+            description: issue.description,
             url: issue.url,
             branch_name: issue.branch_name,
         })
@@ -158,6 +166,7 @@ impl Client {
                 .as_str()
                 .ok_or_else(|| anyhow!("missing title"))?
                 .to_string(),
+            description: issue["description"].as_str().map(String::from),
             url: issue["url"]
                 .as_str()
                 .ok_or_else(|| anyhow!("missing url"))?

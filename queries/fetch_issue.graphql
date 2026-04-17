@@ -3,6 +3,7 @@ query FetchIssue($id: String!) {
     id
     identifier
     title
+    description
     url
     branchName
   }

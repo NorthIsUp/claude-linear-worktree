@@ -40,6 +40,7 @@ async fn create_issue_returns_new_issue() {
                     "id": "i1",
                     "identifier": "ENG-42",
                     "title": "New thing",
+                    "description": null,
                     "url": "https://linear.app/x/issue/ENG-42",
                     "branchName": "adam/eng-42-new-thing"
                 }
@@ -50,7 +51,7 @@ async fn create_issue_returns_new_issue() {
 
     let endpoint = format!("{}/graphql", server.uri());
     let issue = tokio::task::spawn_blocking(move || {
-        Client::with_endpoint("t", &endpoint).create_issue("t1", "New thing")
+        Client::with_endpoint("t", &endpoint).create_issue("t1", "New thing", None)
     })
     .await
     .unwrap()
@@ -58,4 +59,5 @@ async fn create_issue_returns_new_issue() {
 
     assert_eq!(issue.identifier, "ENG-42");
     assert_eq!(issue.branch_name, "adam/eng-42-new-thing");
+    assert_eq!(issue.description, None);
 }

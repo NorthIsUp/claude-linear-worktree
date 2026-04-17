@@ -15,6 +15,7 @@ async fn fetch_issue_parses_response() {
                     "id": "uuid-1",
                     "identifier": "ABC-123",
                     "title": "Fix login",
+                    "description": "Steps to reproduce: ...",
                     "url": "https://linear.app/x/issue/ABC-123",
                     "branchName": "adam/abc-123-fix-login"
                 }
@@ -34,6 +35,10 @@ async fn fetch_issue_parses_response() {
 
     assert_eq!(issue.identifier, "ABC-123");
     assert_eq!(issue.title, "Fix login");
+    assert_eq!(
+        issue.description.as_deref(),
+        Some("Steps to reproduce: ...")
+    );
     assert_eq!(issue.url, "https://linear.app/x/issue/ABC-123");
     assert_eq!(issue.branch_name, "adam/abc-123-fix-login");
 }
