@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use git2::Repository;
 use std::path::{Path, PathBuf};
 
 /// Resolve the worktree directory for a given branch.
@@ -35,6 +36,18 @@ pub fn resolve_worktree_dir(
 /// Replace filesystem-unfriendly characters in a branch name for use as a directory name.
 fn sanitize_for_path(name: &str) -> String {
     name.replace('/', "__")
+}
+
+pub fn resolve_base_branch(git_root: &Path, requested: &str) -> Result<String> {
+    let repo = Repository::open(git_root)?;
+    if repo.find_branch(requested, git2::BranchType::Local).is_ok() {
+        return Ok(requested.to_string());
+    }
+    if requested == "main" && repo.find_branch("master", git2::BranchType::Local).is_ok() {
+        eprintln!("warning: base branch 'main' not found; falling back to 'master'");
+        return Ok("master".to_string());
+    }
+    anyhow::bail!("base branch {requested} not found locally");
 }
 
 #[cfg(test)]
