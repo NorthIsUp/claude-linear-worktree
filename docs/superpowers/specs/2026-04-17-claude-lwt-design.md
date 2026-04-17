@@ -52,7 +52,7 @@ clt [TICKET_ID] [OPTIONS] [-- <claude args>]         # alias symlink
 - All unknown arguments and anything after `--` are forwarded to `claude`.
 
 **Environment**
-- `LINEAR_API_KEY` — Linear personal API key. Required unless `linear-cli` is
+- `LINEAR_TOKEN` — Linear personal API key. Required unless `linear-cli` is
   on `$PATH` and already authenticated.
 
 ## Architecture
@@ -136,13 +136,13 @@ comments on the ticket as updates on your progress.
 
 ## Auth
 
-1. If `LINEAR_API_KEY` is set, use it as bearer against
+1. If `LINEAR_TOKEN` is set, use it as bearer against
    `https://api.linear.app/graphql`.
 2. Otherwise, attempt to retrieve a token via `linear-cli`. The implementation
    task must: (a) inspect `linear-cli --help` and its docs to find a
    token-printing subcommand (e.g. `linear-cli auth print-token` or reading
    `linear-cli`'s config file directly); (b) if no such mechanism exists,
-   remove this fallback and treat `LINEAR_API_KEY` as strictly required. The
+   remove this fallback and treat `LINEAR_TOKEN` as strictly required. The
    fallback is best-effort convenience, not a hard requirement of this tool.
 3. If neither works, hard error with instructions to create a key at
    `https://linear.app/settings/account/security`.
@@ -165,10 +165,26 @@ comments on the ticket as updates on your progress.
 **Input normalization:**
 - `TICKET_ID` uppercased before query.
 
+## Tooling
+
+The project uses **mise** (https://mise.jdx.dev) to pin the Rust toolchain and
+install dev-time tools. This gives contributors a one-command setup (`mise
+install`) and lets CI install the exact same versions with `mise install` on
+the runner.
+
+- `mise.toml` pins:
+  - `rust` (e.g. `latest`, or a specific `1.x` if we hit an MSRV issue)
+  - `graphql_client_cli` (used once for schema introspection in Task 6;
+    re-runnable by any contributor who wants to refresh the vendored schema)
+- CI workflows install mise first, then run `mise install`, then delegate to
+  standard `cargo` commands. This replaces any hardcoded `actions-rust-lang/*`
+  setup action.
+
 ## Repo Layout
 
 ```
 claude-linear-worktree/
+├── mise.toml                  # pins Rust + graphql_client_cli
 ├── Cargo.toml                 # binary "claude-lwt"
 ├── src/
 │   ├── main.rs

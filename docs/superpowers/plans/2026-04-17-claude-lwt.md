@@ -22,7 +22,7 @@ src/
   prompt.rs                    # template rendering
   linear/
     mod.rs                     # public API (Client + IssueInfo)
-    auth.rs                    # LINEAR_API_KEY + linear-cli fallback
+    auth.rs                    # LINEAR_TOKEN + linear-cli fallback
     queries.rs                 # graphql_client GraphQLQuery derives
   git.rs                       # worktree path + git2 ops
 queries/
@@ -42,12 +42,31 @@ LICENSE
 
 ---
 
-## Task 1: Cargo scaffolding and `.gitignore`
+## Task 1: Cargo scaffolding, mise config, and `.gitignore`
 
 **Files:**
 - Create: `Cargo.toml`
+- Create: `mise.toml`
 - Create: `src/main.rs`
 - Create: `.gitignore`
+
+- [ ] **Step 1a: Create `mise.toml`**
+
+```toml
+[tools]
+rust = "latest"
+"cargo:graphql_client_cli" = "latest"
+```
+
+Verify mise picks it up:
+
+```bash
+mise install
+mise exec -- rustc --version
+mise exec -- graphql-client --version
+```
+
+Expected: all three succeed. Rust compiles; `graphql-client` prints a version (this tool is used once in Task 6).
 
 - [ ] **Step 1: Create `Cargo.toml`**
 
@@ -106,8 +125,8 @@ Expected: compiles cleanly, produces `target/debug/claude-lwt`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Cargo.toml Cargo.lock src/main.rs .gitignore
-git commit -m "Scaffold Cargo project"
+git add mise.toml Cargo.toml Cargo.lock src/main.rs .gitignore
+git commit -m "Scaffold Cargo project with mise tooling"
 ```
 
 ---
@@ -129,7 +148,23 @@ gh api repos/NorthIsUp/tunnletops/contents/.github/workflows/release.yml --jq .c
 
 - [ ] **Step 2: Open each file and adapt**
 
-Read both files. For each, update any hardcoded binary names or paths referring to `tunneltops`/`tunnletops` to `claude-lwt`. Keep the overall job structure (test/clippy/fmt in CI; multi-target build + release on tag in release).
+Read both files. For each:
+
+1. Update any hardcoded binary names or paths referring to `tunneltops`/`tunnletops` to `claude-lwt`.
+2. Replace any Rust-toolchain setup steps (e.g. `actions-rust-lang/setup-rust-toolchain`, `dtolnay/rust-toolchain`) with mise installation and `mise install`:
+
+```yaml
+      - name: Install mise
+        uses: jdx/mise-action@v2
+        with:
+          experimental: true  # enable cargo: backends if needed
+      - name: Install pinned tools
+        run: mise install
+```
+
+Then in subsequent steps prefix cargo commands with `mise exec --` (e.g. `mise exec -- cargo test --all`) OR rely on mise's shim activation provided by `jdx/mise-action`.
+
+3. Keep the overall job structure (test/clippy/fmt in CI; multi-target build + release on tag in release).
 
 - [ ] **Step 3: Extend `release.yml` to emit `clt` symlink in tarballs**
 
@@ -446,19 +481,19 @@ git commit -m "Add initial prompt template rendering"
 - Create: `queries/create_issue.graphql`
 - Create: `queries/list_teams.graphql`
 
-- [ ] **Step 1: Install the graphql_client CLI**
+- [ ] **Step 1: Ensure `graphql-client` is available via mise**
 
-Run: `cargo install graphql_client_cli`
-Expected: installs successfully (one-time).
+Run: `mise exec -- graphql-client --version`
+Expected: prints a version. If missing, `mise install` first (it's pinned in `mise.toml`).
 
 - [ ] **Step 2: Introspect Linear schema**
 
-The user must have `LINEAR_API_KEY` exported. Run:
+The user must have `LINEAR_TOKEN` exported. Run:
 
 ```bash
-graphql-client introspect-schema \
+mise exec -- graphql-client introspect-schema \
   https://api.linear.app/graphql \
-  --header "Authorization: $LINEAR_API_KEY" \
+  --header "Authorization: $LINEAR_TOKEN" \
   --output linear-schema.graphql
 ```
 
@@ -612,7 +647,7 @@ git commit -m "Wire up graphql_client codegen for Linear queries"
 - Create: `src/linear/auth.rs`
 - Modify: `src/linear/mod.rs` (uncomment `pub mod auth;` if needed)
 
-Design: We prefer `LINEAR_API_KEY`. The `linear-cli` fallback is best-effort; as documented in the spec, we only attempt it if a plausible token-printing subcommand exists. For this first implementation, we implement ONLY the env-var path. A comment in `auth.rs` records the deferred behavior.
+Design: We prefer `LINEAR_TOKEN`. The `linear-cli` fallback is best-effort; as documented in the spec, we only attempt it if a plausible token-printing subcommand exists. For this first implementation, we implement ONLY the env-var path. A comment in `auth.rs` records the deferred behavior.
 
 - [ ] **Step 1: Write failing test**
 
@@ -624,17 +659,17 @@ use anyhow::{bail, Result};
 /// Resolve a Linear API token.
 ///
 /// Order:
-///   1. `LINEAR_API_KEY` environment variable (if non-empty).
+///   1. `LINEAR_TOKEN` environment variable (if non-empty).
 ///   2. (Deferred) `linear-cli`-based fallback — see spec section "Auth" item 2.
 pub fn resolve_token() -> Result<String> {
-    resolve_token_with_env(std::env::var("LINEAR_API_KEY").ok())
+    resolve_token_with_env(std::env::var("LINEAR_TOKEN").ok())
 }
 
 fn resolve_token_with_env(env_value: Option<String>) -> Result<String> {
     match env_value.as_deref().map(str::trim) {
         Some(v) if !v.is_empty() => Ok(v.to_string()),
         _ => bail!(
-            "no Linear API key found; set LINEAR_API_KEY \
+            "no Linear API key found; set LINEAR_TOKEN \
              (create one at https://linear.app/settings/account/security)"
         ),
     }
@@ -659,13 +694,13 @@ mod tests {
     #[test]
     fn errors_on_missing() {
         let e = resolve_token_with_env(None).unwrap_err();
-        assert!(e.to_string().contains("LINEAR_API_KEY"));
+        assert!(e.to_string().contains("LINEAR_TOKEN"));
     }
 
     #[test]
     fn errors_on_empty() {
         let e = resolve_token_with_env(Some("   ".to_string())).unwrap_err();
-        assert!(e.to_string().contains("LINEAR_API_KEY"));
+        assert!(e.to_string().contains("LINEAR_TOKEN"));
     }
 }
 ```
@@ -683,7 +718,7 @@ Expected: PASS (4 tests).
 
 ```bash
 git add src/linear/auth.rs src/linear/mod.rs
-git commit -m "Resolve Linear API token from LINEAR_API_KEY"
+git commit -m "Resolve Linear API token from LINEAR_TOKEN"
 ```
 
 ---
@@ -1568,7 +1603,7 @@ Expected: compiles cleanly. Fix any import paths flagged by the compiler.
 
 - [ ] **Step 3: Manual smoke test (with --no-exec)**
 
-Requires: `LINEAR_API_KEY` exported, a real Linear ticket ID you can fetch, and a cwd inside a git repo with `origin`.
+Requires: `LINEAR_TOKEN` exported, a real Linear ticket ID you can fetch, and a cwd inside a git repo with `origin`.
 
 Run:
 ```bash
@@ -1624,7 +1659,7 @@ clt ABC-123 -- --model opus --resume
 
 ## Environment
 
-- `LINEAR_API_KEY` — required. Create one at
+- `LINEAR_TOKEN` — required. Create one at
   https://linear.app/settings/account/security.
 - `LINEAR_TEAM_ID` — optional default Linear team for new tickets.
 - `CLAUDE_WORKTREE_DIR` — optional override of the worktree base path.
@@ -1716,7 +1751,7 @@ Expected: one run, eventually green. Address any failures (typically missing `ru
 | `--title` + interactive prompt | Tasks 3, 14 |
 | `--no-exec` | Tasks 3, 14 |
 | Passthrough args after `--` | Task 3 |
-| `LINEAR_API_KEY` env var auth | Task 8 |
+| `LINEAR_TOKEN` env var auth | Task 8 |
 | `linear-cli` fallback (deferred per spec) | Task 8 comment |
 | Fetch issue via GraphQL | Tasks 6, 7, 9 |
 | Create issue via GraphQL | Tasks 6, 7, 10 |
