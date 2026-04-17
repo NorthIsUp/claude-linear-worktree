@@ -4,9 +4,6 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
-
 jobs:
   build:
     strategy:
@@ -21,14 +18,16 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: claude-lwt-aarch64-darwin
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            artifact: claude-lwt-x86_64-windows.exe
 
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install mise
         uses: jdx/mise-action@v2
@@ -39,7 +38,6 @@ jobs:
         run: mise install
 
       - name: Add cross-compilation target
-        if: runner.os != 'Windows'
         run: mise exec -- rustup target add ${{ matrix.target }}
 
       - name: Install cross-compilation tools
@@ -56,8 +54,7 @@ jobs:
       - name: Build
         run: mise exec -- cargo build --release --target ${{ matrix.target }}
 
-      - name: Package artifact (unix)
-        if: runner.os != 'Windows'
+      - name: Package artifact
         run: |
           ARCHIVE_DIR="${{ matrix.artifact }}"
           mkdir -p "$ARCHIVE_DIR"
@@ -65,27 +62,21 @@ jobs:
           ln -sf claude-lwt "$ARCHIVE_DIR/clt"
           tar czf "$ARCHIVE_DIR.tar.gz" -C "$ARCHIVE_DIR" .
 
-      - name: Package artifact (windows)
-        if: runner.os == 'Windows'
-        run: cp target/${{ matrix.target }}/release/claude-lwt.exe ${{ matrix.artifact }}
-
       - uses: actions/upload-artifact@v4
-        if: runner.os != 'Windows'
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.tar.gz
 
-      - uses: actions/upload-artifact@v4
-        if: runner.os == 'Windows'
-        with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
-
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         with:
@@ -100,6 +91,15 @@ jobs:
       - name: Extract changelog section
         id: changelog
         run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "No CHANGELOG.md; skipping release notes extraction"
+            {
+              echo 'notes<<EOF'
+              echo ''
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           version="${GITHUB_REF#refs/tags/v}"
           # Extract the [version] section from CHANGELOG.md (stops at next ## heading).
           notes=$(awk -v v="$version" '

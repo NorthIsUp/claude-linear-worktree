@@ -6,11 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install mise
         uses: jdx/mise-action@v2
         with:
@@ -20,4 +26,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: mise exec -- cargo test
       - run: mise exec -- cargo clippy -- -D warnings
-      - run: mise exec -- cargo fmt --check
+      - run: mise exec -- cargo fmt --all -- --check
