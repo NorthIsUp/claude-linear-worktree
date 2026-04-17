@@ -196,7 +196,7 @@ claude-linear-worktree/
 │   ├── fetch_issue.graphql
 │   ├── create_issue.graphql
 │   └── list_teams.graphql
-├── linear-schema.graphql      # vendored Linear GraphQL schema for codegen
+├── linear-schema.json      # vendored Linear GraphQL schema for codegen
 ├── docs/superpowers/specs/    # design docs (this file)
 ├── .github/workflows/
 │   ├── ci.yml                 # adapted from NorthIsUp/tunnletops

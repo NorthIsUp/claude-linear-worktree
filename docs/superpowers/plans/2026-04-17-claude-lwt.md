@@ -29,7 +29,7 @@ queries/
   fetch_issue.graphql
   create_issue.graphql
   list_teams.graphql
-linear-schema.graphql          # vendored
+linear-schema.json          # vendored
 tests/
   cli_parse.rs                 # integration test binary
 .github/workflows/
@@ -478,7 +478,7 @@ git commit -m "Add initial prompt template rendering"
 ## Task 6: Vendor Linear GraphQL schema and write query files
 
 **Files:**
-- Create: `linear-schema.graphql`
+- Create: `linear-schema.json`
 - Create: `queries/fetch_issue.graphql`
 - Create: `queries/create_issue.graphql`
 - Create: `queries/list_teams.graphql`
@@ -496,10 +496,10 @@ The user must have `LINEAR_TOKEN` exported. Run:
 mise exec -- graphql-client introspect-schema \
   https://api.linear.app/graphql \
   --header "Authorization: $LINEAR_TOKEN" \
-  --output linear-schema.graphql
+  --output linear-schema.json
 ```
 
-Expected: `linear-schema.graphql` created, several thousand lines long. Commit it as vendored input to codegen.
+Expected: `linear-schema.json` created, several thousand lines long. Commit it as vendored input to codegen.
 
 If introspection fails (auth, network), read the error and fix before continuing.
 
@@ -551,7 +551,7 @@ mutation CreateIssue($teamId: String!, $title: String!) {
 - [ ] **Step 6: Commit**
 
 ```bash
-git add linear-schema.graphql queries/
+git add linear-schema.json queries/
 git commit -m "Vendor Linear schema and query files"
 ```
 
@@ -597,7 +597,7 @@ use graphql_client::GraphQLQuery;
 
 #[derive(GraphQLQuery)]
 #[graphql(
-    schema_path = "linear-schema.graphql",
+    schema_path = "linear-schema.json",
     query_path = "queries/fetch_issue.graphql",
     response_derives = "Debug, Clone"
 )]
@@ -605,7 +605,7 @@ pub struct FetchIssue;
 
 #[derive(GraphQLQuery)]
 #[graphql(
-    schema_path = "linear-schema.graphql",
+    schema_path = "linear-schema.json",
     query_path = "queries/list_teams.graphql",
     response_derives = "Debug, Clone"
 )]
@@ -613,7 +613,7 @@ pub struct ListTeams;
 
 #[derive(GraphQLQuery)]
 #[graphql(
-    schema_path = "linear-schema.graphql",
+    schema_path = "linear-schema.json",
     query_path = "queries/create_issue.graphql",
     response_derives = "Debug, Clone"
 )]
