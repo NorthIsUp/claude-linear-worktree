@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod queries;
 
 /// Summarized issue data needed by the rest of the app.
