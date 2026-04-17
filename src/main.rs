@@ -5,7 +5,9 @@ use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 use claude_lwt::cli::{normalize_ticket_id, Args};
-use claude_lwt::git::{discover_git_root, ensure_worktree, resolve_base_branch, resolve_worktree_dir};
+use claude_lwt::git::{
+    discover_git_root, ensure_worktree, resolve_base_branch, resolve_worktree_dir,
+};
 use claude_lwt::linear::{auth, Client, IssueInfo};
 use claude_lwt::prompt::{initial_prompt, TicketContext};
 

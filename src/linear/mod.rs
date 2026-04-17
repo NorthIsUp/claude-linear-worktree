@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use graphql_client::{GraphQLQuery, Response};
 use reqwest::blocking::Client as HttpClient;
 
-use queries::{fetch_issue, FetchIssue, CreateIssue, create_issue, ListTeams, list_teams};
+use queries::{create_issue, fetch_issue, list_teams, CreateIssue, FetchIssue, ListTeams};
 
 const DEFAULT_ENDPOINT: &str = "https://api.linear.app/graphql";
 
@@ -73,7 +73,8 @@ impl Client {
                 bail!("Linear GraphQL error: {msg}");
             }
         }
-        resp.data.ok_or_else(|| anyhow!("Linear response had no data"))
+        resp.data
+            .ok_or_else(|| anyhow!("Linear response had no data"))
     }
 
     pub fn list_teams(&self) -> Result<Vec<TeamInfo>> {
@@ -82,7 +83,11 @@ impl Client {
             .teams
             .nodes
             .into_iter()
-            .map(|n| TeamInfo { id: n.id, key: n.key, name: n.name })
+            .map(|n| TeamInfo {
+                id: n.id,
+                key: n.key,
+                name: n.name,
+            })
             .collect())
     }
 

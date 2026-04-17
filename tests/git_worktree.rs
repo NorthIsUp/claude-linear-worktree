@@ -4,7 +4,11 @@ use std::process::Command;
 use tempfile::tempdir;
 
 fn run(cwd: &std::path::Path, args: &[&str]) {
-    let status = Command::new("git").args(args).current_dir(cwd).status().unwrap();
+    let status = Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .status()
+        .unwrap();
     assert!(status.success(), "git {args:?} failed");
 }
 
@@ -26,22 +30,26 @@ fn discovers_git_root_from_subdir() {
     let sub = td.path().join("nested");
     std::fs::create_dir_all(&sub).unwrap();
     let root = discover_git_root(&sub).unwrap();
-    assert_eq!(root.canonicalize().unwrap(), td.path().canonicalize().unwrap());
+    assert_eq!(
+        root.canonicalize().unwrap(),
+        td.path().canonicalize().unwrap()
+    );
 }
 
 #[test]
 fn creates_new_branch_worktree_off_base() {
     let td = init_repo_with_commit();
-    let wt_dir: PathBuf = td.path().parent().unwrap()
-        .join(format!("{}.worktrees", td.path().file_name().unwrap().to_string_lossy()))
+    let wt_dir: PathBuf = td
+        .path()
+        .parent()
+        .unwrap()
+        .join(format!(
+            "{}.worktrees",
+            td.path().file_name().unwrap().to_string_lossy()
+        ))
         .join("feature-x");
 
-    let setup = ensure_worktree(
-        td.path(),
-        "feature-x",
-        "main",
-        &wt_dir,
-    ).unwrap();
+    let setup = ensure_worktree(td.path(), "feature-x", "main", &wt_dir).unwrap();
 
     assert!(matches!(setup, WorktreeSetup::CreatedNewBranch));
     assert!(wt_dir.join(".git").exists() || wt_dir.join("README.md").exists());
@@ -56,8 +64,14 @@ fn creates_new_branch_worktree_off_base() {
 #[test]
 fn reuses_existing_worktree_if_path_is_same_branch() {
     let td = init_repo_with_commit();
-    let wt_dir = td.path().parent().unwrap()
-        .join(format!("{}.worktrees", td.path().file_name().unwrap().to_string_lossy()))
+    let wt_dir = td
+        .path()
+        .parent()
+        .unwrap()
+        .join(format!(
+            "{}.worktrees",
+            td.path().file_name().unwrap().to_string_lossy()
+        ))
         .join("feature-y");
 
     ensure_worktree(td.path(), "feature-y", "main", &wt_dir).unwrap();

@@ -62,7 +62,9 @@ pub enum WorktreeSetup {
 pub fn discover_git_root(start_dir: &Path) -> Result<PathBuf> {
     let repo = Repository::discover(start_dir)
         .with_context(|| format!("not inside a git repository: {}", start_dir.display()))?;
-    let workdir = repo.workdir().ok_or_else(|| anyhow!("bare repo unsupported"))?;
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| anyhow!("bare repo unsupported"))?;
     Ok(workdir.to_path_buf())
 }
 
@@ -143,13 +145,19 @@ fn is_worktree_for_branch(repo: &Repository, path: &Path, branch_name: &str) -> 
     for name in repo.worktrees()?.iter().flatten() {
         let wt = repo.find_worktree(name)?;
         let wt_path = wt.path();
-        let wt_canon = wt_path.canonicalize().unwrap_or_else(|_| wt_path.to_path_buf());
+        let wt_canon = wt_path
+            .canonicalize()
+            .unwrap_or_else(|_| wt_path.to_path_buf());
         if wt_canon == path_canon {
             // Worktrees have a .git FILE (not dir) pointing to the gitdir.
             let head_path = wt_path.join(".git");
             let git_common = if head_path.is_file() {
                 let contents = std::fs::read_to_string(&head_path)?;
-                let gitdir = contents.trim().strip_prefix("gitdir: ").unwrap_or("").trim();
+                let gitdir = contents
+                    .trim()
+                    .strip_prefix("gitdir: ")
+                    .unwrap_or("")
+                    .trim();
                 PathBuf::from(gitdir)
             } else {
                 head_path
@@ -184,23 +192,16 @@ mod tests {
 
     #[test]
     fn default_uses_sibling_worktrees_dir() {
-        let p = resolve_worktree_dir(
-            Path::new("/repos/myrepo"),
-            "main",
-            None,
-        )
-        .unwrap();
+        let p = resolve_worktree_dir(Path::new("/repos/myrepo"), "main", None).unwrap();
         assert_eq!(p, PathBuf::from("/repos/myrepo.worktrees/main"));
     }
 
     #[test]
     fn default_sanitizes_slashes_in_branch() {
-        let p = resolve_worktree_dir(
-            Path::new("/repos/myrepo"),
-            "adam/abc-123-fix",
-            None,
-        )
-        .unwrap();
-        assert_eq!(p, PathBuf::from("/repos/myrepo.worktrees/adam__abc-123-fix"));
+        let p = resolve_worktree_dir(Path::new("/repos/myrepo"), "adam/abc-123-fix", None).unwrap();
+        assert_eq!(
+            p,
+            PathBuf::from("/repos/myrepo.worktrees/adam__abc-123-fix")
+        );
     }
 }

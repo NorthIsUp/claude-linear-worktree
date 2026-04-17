@@ -17,12 +17,11 @@ async fn list_teams_returns_all() {
         .await;
 
     let endpoint = format!("{}/graphql", server.uri());
-    let teams: Vec<TeamInfo> = tokio::task::spawn_blocking(move || {
-        Client::with_endpoint("t", &endpoint).list_teams()
-    })
-    .await
-    .unwrap()
-    .unwrap();
+    let teams: Vec<TeamInfo> =
+        tokio::task::spawn_blocking(move || Client::with_endpoint("t", &endpoint).list_teams())
+            .await
+            .unwrap()
+            .unwrap();
 
     assert_eq!(teams.len(), 2);
     assert_eq!(teams[0].key, "ENG");
