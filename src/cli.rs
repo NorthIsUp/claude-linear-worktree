@@ -1,13 +1,16 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-/// Launch claude-code in a git worktree for a Linear ticket.
+/// Launch claude-code in a git worktree for a Linear ticket or GitHub PR.
 ///
 /// Any args after `--` are forwarded verbatim to the `claude` binary.
 #[derive(Parser, Debug)]
 #[command(name = "claude-lwt", version, about)]
 pub struct Args {
-    /// Linear ticket identifier (e.g. ABC-123). If omitted, a new ticket is created.
+    /// Linear ticket identifier (e.g. ABC-123), Linear issue URL
+    /// (e.g. https://linear.app/acme/issue/ABC-123/slug), or GitHub PR URL
+    /// (e.g. https://github.com/owner/repo/pull/123). If omitted, a new
+    /// Linear ticket is created.
     pub ticket_id: Option<String>,
 
     /// Base directory for worktrees. Default: <git_root>/../<repo>.worktrees/<branch>.
@@ -46,5 +49,23 @@ impl Args {
 }
 
 pub fn normalize_ticket_id(raw: &str) -> String {
-    raw.trim().to_ascii_uppercase()
+    let trimmed = raw.trim();
+    let id = extract_linear_id_from_url(trimmed).unwrap_or(trimmed);
+    id.to_ascii_uppercase()
+}
+
+/// If `input` looks like a Linear issue URL, return the ticket identifier
+/// segment (e.g. `CLA-588` from `https://linear.app/acme/issue/CLA-588/slug`).
+fn extract_linear_id_from_url(input: &str) -> Option<&str> {
+    let rest = input
+        .strip_prefix("https://linear.app/")
+        .or_else(|| input.strip_prefix("http://linear.app/"))
+        .or_else(|| input.strip_prefix("linear.app/"))?;
+    let after_issue = rest.split_once("/issue/")?.1;
+    let id = after_issue.split(['/', '?', '#']).next()?;
+    if id.is_empty() {
+        None
+    } else {
+        Some(id)
+    }
 }

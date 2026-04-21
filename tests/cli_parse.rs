@@ -63,3 +63,27 @@ fn keeps_uppercase_id() {
 fn trims_whitespace() {
     assert_eq!(normalize_ticket_id("  abc-1 "), "ABC-1");
 }
+
+#[test]
+fn extracts_id_from_linear_url() {
+    assert_eq!(
+        normalize_ticket_id("https://linear.app/clarahealthus/issue/CLA-588/block-list-on-did-it"),
+        "CLA-588"
+    );
+}
+
+#[test]
+fn extracts_id_from_linear_url_without_slug() {
+    assert_eq!(
+        normalize_ticket_id("https://linear.app/acme/issue/abc-9"),
+        "ABC-9"
+    );
+}
+
+#[test]
+fn extracts_id_from_linear_url_with_query_and_whitespace() {
+    assert_eq!(
+        normalize_ticket_id("  https://linear.app/acme/issue/abc-9?foo=bar  "),
+        "ABC-9"
+    );
+}
