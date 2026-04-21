@@ -6,6 +6,42 @@ pub struct TicketContext<'a> {
     pub has_context: bool,
 }
 
+pub struct PrContext<'a> {
+    pub number: u64,
+    pub title: &'a str,
+    pub url: &'a str,
+    /// True when the PR has a non-empty body to pull context from.
+    pub has_context: bool,
+}
+
+pub fn pr_initial_prompt(ctx: &PrContext<'_>) -> String {
+    if ctx.has_context {
+        format!(
+            "You are continuing work on GitHub PR #{num}: \"{title}\"\n\
+             URL: {url}\n\
+             \n\
+             The PR branch is checked out in this worktree. Read the PR body,\n\
+             review the existing diff against the base branch, and continue\n\
+             the work. Leave comments on the PR as progress updates.",
+            num = ctx.number,
+            title = ctx.title,
+            url = ctx.url,
+        )
+    } else {
+        format!(
+            "You are continuing work on GitHub PR #{num}: \"{title}\"\n\
+             URL: {url}\n\
+             \n\
+             The PR has no description yet. Review the existing diff against\n\
+             the base branch to understand what's been done, then continue\n\
+             the work and leave PR comments as progress updates.",
+            num = ctx.number,
+            title = ctx.title,
+            url = ctx.url,
+        )
+    }
+}
+
 pub fn initial_prompt(ctx: &TicketContext<'_>) -> String {
     if ctx.has_context {
         format!(

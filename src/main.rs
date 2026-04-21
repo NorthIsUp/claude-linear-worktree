@@ -8,31 +8,40 @@ use claude_lwt::cli::{normalize_ticket_id, Args};
 use claude_lwt::git::{
     discover_git_root, ensure_worktree, resolve_base_branch, resolve_worktree_dir,
 };
+use claude_lwt::github::{self, PrInfo};
 use claude_lwt::linear::{auth, Client, IssueInfo};
-use claude_lwt::prompt::{initial_prompt, TicketContext};
+use claude_lwt::prompt::{initial_prompt, pr_initial_prompt, PrContext, TicketContext};
+
+enum Source {
+    Linear(IssueInfo),
+    GitHubPr(PrInfo),
+}
+
+impl Source {
+    fn branch_name(&self) -> &str {
+        match self {
+            Source::Linear(i) => &i.branch_name,
+            Source::GitHubPr(p) => &p.head_ref,
+        }
+    }
+}
 
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    let token = auth::resolve_token()?;
-    let linear = Client::new(token);
-
     let cwd = env::current_dir()?;
     let git_root = discover_git_root(&cwd)?;
 
-    let issue = match args.ticket_id.as_deref() {
-        Some(raw) => {
-            let id = normalize_ticket_id(raw);
-            linear.fetch_issue(&id)?
-        }
-        None => create_new_ticket(&linear, args.team.as_deref(), args.title.as_deref())?,
-    };
+    let source = resolve_source(&args)?;
 
     let base = resolve_base_branch(&git_root, &args.base)?;
-    let worktree_dir =
-        resolve_worktree_dir(&git_root, &issue.branch_name, args.worktree_dir.as_deref())?;
+    let worktree_dir = resolve_worktree_dir(
+        &git_root,
+        source.branch_name(),
+        args.worktree_dir.as_deref(),
+    )?;
 
-    let setup = ensure_worktree(&git_root, &issue.branch_name, &base, &worktree_dir)?;
+    let setup = ensure_worktree(&git_root, source.branch_name(), &base, &worktree_dir)?;
     eprintln!("worktree ready: {} ({:?})", worktree_dir.display(), setup);
 
     if args.no_exec {
@@ -40,7 +49,28 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    launch_claude(&worktree_dir, &issue, &args.claude_args)
+    launch_claude(&worktree_dir, &source, &args.claude_args)
+}
+
+fn resolve_source(args: &Args) -> Result<Source> {
+    match args.ticket_id.as_deref() {
+        Some(raw) if github::is_pr_url(raw) => Ok(Source::GitHubPr(github::fetch_pr(raw.trim())?)),
+        Some(raw) => {
+            let token = auth::resolve_token()?;
+            let linear = Client::new(token);
+            let id = normalize_ticket_id(raw);
+            Ok(Source::Linear(linear.fetch_issue(&id)?))
+        }
+        None => {
+            let token = auth::resolve_token()?;
+            let linear = Client::new(token);
+            Ok(Source::Linear(create_new_ticket(
+                &linear,
+                args.team.as_deref(),
+                args.title.as_deref(),
+            )?))
+        }
+    }
 }
 
 fn create_new_ticket(
@@ -140,21 +170,37 @@ fn parse_title_and_body(raw: &str) -> Result<(String, Option<String>)> {
 
 fn launch_claude(
     worktree_dir: &std::path::Path,
-    issue: &IssueInfo,
+    source: &Source,
     passthrough: &[String],
 ) -> Result<()> {
-    let has_context = issue
-        .description
-        .as_deref()
-        .map(|d| !d.trim().is_empty())
-        .unwrap_or(false);
-
-    let prompt = initial_prompt(&TicketContext {
-        identifier: &issue.identifier,
-        title: &issue.title,
-        url: &issue.url,
-        has_context,
-    });
+    let prompt = match source {
+        Source::Linear(issue) => {
+            let has_context = issue
+                .description
+                .as_deref()
+                .map(|d| !d.trim().is_empty())
+                .unwrap_or(false);
+            initial_prompt(&TicketContext {
+                identifier: &issue.identifier,
+                title: &issue.title,
+                url: &issue.url,
+                has_context,
+            })
+        }
+        Source::GitHubPr(pr) => {
+            let has_context = pr
+                .body
+                .as_deref()
+                .map(|b| !b.trim().is_empty())
+                .unwrap_or(false);
+            pr_initial_prompt(&PrContext {
+                number: pr.number,
+                title: &pr.title,
+                url: &pr.url,
+                has_context,
+            })
+        }
+    };
 
     let mut cmd = Command::new("claude");
     cmd.current_dir(worktree_dir);

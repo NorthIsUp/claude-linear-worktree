@@ -19,12 +19,18 @@ includes a `clt` symlink.
 # Work on an existing ticket
 clt ABC-123
 
+# Resume work on a GitHub PR (uses the PR head branch for the worktree)
+clt https://github.com/owner/repo/pull/123
+
 # Start a new feature — prompts for title, creates Linear ticket, launches claude
 clt
 
 # Pass extra flags to claude
 clt ABC-123 -- --model opus --resume
 ```
+
+PR mode requires the `gh` CLI to be installed and authenticated. It does not
+require `LINEAR_TOKEN`.
 
 ## Environment
 
