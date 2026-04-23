@@ -4,7 +4,8 @@ use std::env;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
 
-use claude_lwt::cli::{normalize_ticket_id, Args};
+use claude_lwt::activate::{self, sh_quote};
+use claude_lwt::cli::{looks_like_linear_ticket, normalize_ticket_id, Args};
 use claude_lwt::git::{
     discover_git_root, ensure_worktree, resolve_base_branch, resolve_worktree_dir,
 };
@@ -15,6 +16,7 @@ use claude_lwt::prompt::{initial_prompt, pr_initial_prompt, PrContext, TicketCon
 enum Source {
     Linear(IssueInfo),
     GitHubPr(PrInfo),
+    Branch(String),
 }
 
 impl Source {
@@ -22,11 +24,17 @@ impl Source {
         match self {
             Source::Linear(i) => &i.branch_name,
             Source::GitHubPr(p) => &p.head_ref,
+            Source::Branch(b) => b,
         }
     }
 }
 
 fn main() -> Result<()> {
+    let raw: Vec<std::ffi::OsString> = env::args_os().collect();
+    if raw.get(1).and_then(|s| s.to_str()) == Some("activate") {
+        return activate::run(&raw[2..]);
+    }
+
     let args = Args::parse();
 
     let cwd = env::current_dir()?;
@@ -46,15 +54,80 @@ fn main() -> Result<()> {
 
     if args.no_exec {
         eprintln!("--no-exec set; stopping before claude launch");
+        if args.emit_shell {
+            println!("cd {}", sh_quote(&worktree_dir.display().to_string()));
+        }
+        return Ok(());
+    }
+
+    if args.emit_shell {
+        emit_shell_launch(&worktree_dir, &source, &args.claude_args);
         return Ok(());
     }
 
     launch_claude(&worktree_dir, &source, &args.claude_args)
 }
 
+fn emit_shell_launch(
+    worktree_dir: &std::path::Path,
+    source: &Source,
+    passthrough: &[String],
+) {
+    let prompt = build_prompt(source);
+    let mut claude_cmd = String::from("exec claude");
+    for a in passthrough {
+        claude_cmd.push(' ');
+        claude_cmd.push_str(&sh_quote(a));
+    }
+    if let Some(p) = prompt {
+        claude_cmd.push(' ');
+        claude_cmd.push_str(&sh_quote(&p));
+    }
+    println!(
+        "cd {} && {}",
+        sh_quote(&worktree_dir.display().to_string()),
+        claude_cmd
+    );
+}
+
+fn build_prompt(source: &Source) -> Option<String> {
+    match source {
+        Source::Branch(_) => None,
+        Source::Linear(issue) => Some({
+            let has_context = issue
+                .description
+                .as_deref()
+                .map(|d| !d.trim().is_empty())
+                .unwrap_or(false);
+            initial_prompt(&TicketContext {
+                identifier: &issue.identifier,
+                title: &issue.title,
+                url: &issue.url,
+                has_context,
+            })
+        }),
+        Source::GitHubPr(pr) => Some({
+            let has_context = pr
+                .body
+                .as_deref()
+                .map(|b| !b.trim().is_empty())
+                .unwrap_or(false);
+            pr_initial_prompt(&PrContext {
+                number: pr.number,
+                title: &pr.title,
+                url: &pr.url,
+                has_context,
+            })
+        }),
+    }
+}
+
 fn resolve_source(args: &Args) -> Result<Source> {
     match args.ticket_id.as_deref() {
         Some(raw) if github::is_pr_url(raw) => Ok(Source::GitHubPr(github::fetch_pr(raw.trim())?)),
+        Some(raw) if !is_linear_url(raw) && !looks_like_linear_ticket(raw) => {
+            Ok(Source::Branch(raw.trim().to_string()))
+        }
         Some(raw) => {
             let token = auth::resolve_token()?;
             let linear = Client::new(token);
@@ -71,6 +144,13 @@ fn resolve_source(args: &Args) -> Result<Source> {
             )?))
         }
     }
+}
+
+fn is_linear_url(s: &str) -> bool {
+    let s = s.trim();
+    s.starts_with("https://linear.app/")
+        || s.starts_with("http://linear.app/")
+        || s.starts_with("linear.app/")
 }
 
 fn create_new_ticket(
@@ -173,41 +253,16 @@ fn launch_claude(
     source: &Source,
     passthrough: &[String],
 ) -> Result<()> {
-    let prompt = match source {
-        Source::Linear(issue) => {
-            let has_context = issue
-                .description
-                .as_deref()
-                .map(|d| !d.trim().is_empty())
-                .unwrap_or(false);
-            initial_prompt(&TicketContext {
-                identifier: &issue.identifier,
-                title: &issue.title,
-                url: &issue.url,
-                has_context,
-            })
-        }
-        Source::GitHubPr(pr) => {
-            let has_context = pr
-                .body
-                .as_deref()
-                .map(|b| !b.trim().is_empty())
-                .unwrap_or(false);
-            pr_initial_prompt(&PrContext {
-                number: pr.number,
-                title: &pr.title,
-                url: &pr.url,
-                has_context,
-            })
-        }
-    };
+    let prompt = build_prompt(source);
 
     let mut cmd = Command::new("claude");
     cmd.current_dir(worktree_dir);
     for arg in passthrough {
         cmd.arg(arg);
     }
-    cmd.arg(&prompt);
+    if let Some(p) = prompt {
+        cmd.arg(p);
+    }
 
     // Replace this process with claude so it inherits the terminal cleanly.
     let err = cmd.exec();

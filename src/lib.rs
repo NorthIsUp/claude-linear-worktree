@@ -1,3 +1,4 @@
+pub mod activate;
 pub mod cli;
 pub mod git;
 pub mod github;

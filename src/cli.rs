@@ -33,6 +33,11 @@ pub struct Args {
     #[arg(long)]
     pub no_exec: bool,
 
+    /// Instead of exec'ing claude, print shell commands (cd + exec claude)
+    /// to stdout for a wrapper shell function to eval. See `clt activate`.
+    #[arg(long, hide = true)]
+    pub emit_shell: bool,
+
     /// Everything after `--` is passed to `claude`.
     #[arg(last = true)]
     pub claude_args: Vec<String>,
@@ -52,6 +57,19 @@ pub fn normalize_ticket_id(raw: &str) -> String {
     let trimmed = raw.trim();
     let id = extract_linear_id_from_url(trimmed).unwrap_or(trimmed);
     id.to_ascii_uppercase()
+}
+
+/// A Linear ticket id looks like `ABC-123` (letters, dash, digits). Anything
+/// else that isn't a URL is treated as a git branch name.
+pub fn looks_like_linear_ticket(s: &str) -> bool {
+    let s = s.trim();
+    let Some((prefix, suffix)) = s.split_once('-') else {
+        return false;
+    };
+    !prefix.is_empty()
+        && prefix.chars().all(|c| c.is_ascii_alphabetic())
+        && !suffix.is_empty()
+        && suffix.chars().all(|c| c.is_ascii_digit())
 }
 
 /// If `input` looks like a Linear issue URL, return the ticket identifier

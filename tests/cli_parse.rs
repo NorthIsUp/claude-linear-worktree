@@ -47,7 +47,25 @@ fn worktree_dir_flag_reads_path() {
     );
 }
 
-use claude_lwt::cli::normalize_ticket_id;
+use claude_lwt::cli::{looks_like_linear_ticket, normalize_ticket_id};
+
+#[test]
+fn linear_ticket_detected() {
+    assert!(looks_like_linear_ticket("ABC-123"));
+    assert!(looks_like_linear_ticket("abc-1"));
+}
+
+#[test]
+fn branch_names_not_mistaken_for_ticket() {
+    assert!(!looks_like_linear_ticket(
+        "claude/update-deployment-notifications-DGf4n"
+    ));
+    assert!(!looks_like_linear_ticket("feature/abc-123-foo"));
+    assert!(!looks_like_linear_ticket("main"));
+    assert!(!looks_like_linear_ticket("ABC-12b"));
+    assert!(!looks_like_linear_ticket("-123"));
+    assert!(!looks_like_linear_ticket("ABC-"));
+}
 
 #[test]
 fn normalizes_lowercase_id() {

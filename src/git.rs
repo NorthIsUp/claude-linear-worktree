@@ -110,10 +110,16 @@ pub fn ensure_worktree(
 
     let commit = repo.find_commit(target_oid)?;
 
-    let branch = match repo.find_branch(branch_name, BranchType::Local) {
+    let mut branch = match repo.find_branch(branch_name, BranchType::Local) {
         Ok(b) => b,
         Err(_) => repo.branch(branch_name, &commit, false)?,
     };
+    if remote_has_branch {
+        let upstream = format!("origin/{branch_name}");
+        if let Err(e) = branch.set_upstream(Some(&upstream)) {
+            eprintln!("warning: failed to set upstream to {upstream}: {e}");
+        }
+    }
     let branch_ref = branch.into_reference();
 
     let mut opts = WorktreeAddOptions::new();

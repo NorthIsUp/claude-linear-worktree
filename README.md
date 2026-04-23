@@ -32,6 +32,20 @@ clt ABC-123 -- --model opus --resume
 PR mode requires the `gh` CLI to be installed and authenticated. It does not
 require `LINEAR_TOKEN`.
 
+## Shell activation
+
+By default the binary execs `claude` directly, which can't change the parent
+shell's working directory. Install the `clt` shell function if you want your
+shell to land inside the worktree when claude exits:
+
+```bash
+# bash/zsh — add to ~/.bashrc or ~/.zshrc
+eval "$(clt activate --shell $SHELL)"
+```
+
+The function runs the real binary with `--emit-shell`, then `eval`s its
+`cd … && exec claude …` output.
+
 ## Environment
 
 - `LINEAR_TOKEN` — required. Create one at
