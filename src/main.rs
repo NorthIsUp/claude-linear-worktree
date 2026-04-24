@@ -43,13 +43,18 @@ fn main() -> Result<()> {
     let source = resolve_source(&args)?;
 
     let base = resolve_base_branch(&git_root, &args.base)?;
-    let worktree_dir = resolve_worktree_dir(
+    let default_worktree_dir = resolve_worktree_dir(
         &git_root,
         source.branch_name(),
         args.worktree_dir.as_deref(),
     )?;
 
-    let setup = ensure_worktree(&git_root, source.branch_name(), &base, &worktree_dir)?;
+    let (worktree_dir, setup) = ensure_worktree(
+        &git_root,
+        source.branch_name(),
+        &base,
+        &default_worktree_dir,
+    )?;
     eprintln!("worktree ready: {} ({:?})", worktree_dir.display(), setup);
 
     if args.no_exec {

@@ -68,21 +68,31 @@ pub fn discover_git_root(start_dir: &Path) -> Result<PathBuf> {
     Ok(workdir.to_path_buf())
 }
 
-/// Create or reuse a worktree for `branch_name`, checking out from origin if the
-/// remote has it, otherwise creating a new branch off `base_branch`.
+/// Create or reuse a worktree for `branch_name`.
+///
+/// Resolution order:
+///   1. If any worktree is already registered for `branch_name` (at any path),
+///      reuse it — the returned path is that worktree's path, which may differ
+///      from `worktree_path`.
+///   2. If `worktree_path` exists on disk but isn't a worktree for this branch,
+///      bail.
+///   3. Otherwise, create a new worktree at `worktree_path`, tracking
+///      `origin/<branch_name>` if the remote has it, else a new branch off
+///      `base_branch`.
 pub fn ensure_worktree(
     git_root: &Path,
     branch_name: &str,
     base_branch: &str,
     worktree_path: &Path,
-) -> Result<WorktreeSetup> {
+) -> Result<(PathBuf, WorktreeSetup)> {
     let repo = Repository::open(git_root)
         .with_context(|| format!("failed to open repo at {}", git_root.display()))?;
 
+    if let Some(existing) = find_worktree_for_branch(&repo, branch_name)? {
+        return Ok((existing, WorktreeSetup::ReusedExisting));
+    }
+
     if worktree_path.exists() {
-        if is_worktree_for_branch(&repo, worktree_path, branch_name)? {
-            return Ok(WorktreeSetup::ReusedExisting);
-        }
         anyhow::bail!(
             "path {} exists but is not a worktree for branch {branch_name}",
             worktree_path.display()
@@ -127,11 +137,12 @@ pub fn ensure_worktree(
     repo.worktree(&wt_name, worktree_path, Some(&opts))
         .with_context(|| format!("failed to create worktree at {}", worktree_path.display()))?;
 
-    if remote_has_branch {
-        Ok(WorktreeSetup::CheckedOutExistingRemoteBranch)
+    let setup = if remote_has_branch {
+        WorktreeSetup::CheckedOutExistingRemoteBranch
     } else {
-        Ok(WorktreeSetup::CreatedNewBranch)
-    }
+        WorktreeSetup::CreatedNewBranch
+    };
+    Ok((worktree_path.to_path_buf(), setup))
 }
 
 fn fetch_and_check_remote_branch(repo: &Repository, branch_name: &str) -> Result<bool> {
@@ -146,39 +157,45 @@ fn fetch_and_check_remote_branch(repo: &Repository, branch_name: &str) -> Result
     Ok(repo.refname_to_id(&full).is_ok())
 }
 
-fn is_worktree_for_branch(repo: &Repository, path: &Path, branch_name: &str) -> Result<bool> {
-    let path_canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    for name in repo.worktrees()?.iter().flatten() {
-        let wt = repo.find_worktree(name)?;
-        let wt_path = wt.path();
-        let wt_canon = wt_path
-            .canonicalize()
-            .unwrap_or_else(|_| wt_path.to_path_buf());
-        if wt_canon == path_canon {
-            // Worktrees have a .git FILE (not dir) pointing to the gitdir.
-            let head_path = wt_path.join(".git");
-            let git_common = if head_path.is_file() {
-                let contents = std::fs::read_to_string(&head_path)?;
-                let gitdir = contents
-                    .trim()
-                    .strip_prefix("gitdir: ")
-                    .unwrap_or("")
-                    .trim();
-                PathBuf::from(gitdir)
-            } else {
-                head_path
-            };
-            let head_file = git_common.join("HEAD");
-            if head_file.exists() {
-                let head = std::fs::read_to_string(&head_file)?;
-                let expected = format!("ref: refs/heads/{branch_name}");
-                if head.trim() == expected {
-                    return Ok(true);
-                }
+/// Find any registered worktree whose HEAD points to `refs/heads/<branch_name>`.
+/// Returns the worktree's path if found. The main worktree is also considered.
+fn find_worktree_for_branch(repo: &Repository, branch_name: &str) -> Result<Option<PathBuf>> {
+    let expected = format!("ref: refs/heads/{branch_name}");
+
+    if let Some(workdir) = repo.workdir() {
+        let head_file = repo.path().join("HEAD");
+        if head_file.exists() {
+            let head = std::fs::read_to_string(&head_file)?;
+            if head.trim() == expected {
+                return Ok(Some(workdir.to_path_buf()));
             }
         }
     }
-    Ok(false)
+
+    for name in repo.worktrees()?.iter().flatten() {
+        let wt = repo.find_worktree(name)?;
+        let wt_path = wt.path().to_path_buf();
+        let head_link = wt_path.join(".git");
+        let gitdir = if head_link.is_file() {
+            let contents = std::fs::read_to_string(&head_link)?;
+            let raw = contents
+                .trim()
+                .strip_prefix("gitdir:")
+                .unwrap_or("")
+                .trim();
+            PathBuf::from(raw)
+        } else {
+            head_link
+        };
+        let head_file = gitdir.join("HEAD");
+        if head_file.exists() {
+            let head = std::fs::read_to_string(&head_file)?;
+            if head.trim() == expected {
+                return Ok(Some(wt_path));
+            }
+        }
+    }
+    Ok(None)
 }
 
 #[cfg(test)]
