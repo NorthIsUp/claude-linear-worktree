@@ -5,7 +5,7 @@ use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 use claude_lwt::activate::{self, sh_quote};
-use claude_lwt::cli::{looks_like_linear_ticket, normalize_ticket_id, Args};
+use claude_lwt::cli::{looks_like_linear_ticket, looks_like_sentence, normalize_ticket_id, Args};
 use claude_lwt::git::{
     discover_git_root, ensure_worktree, resolve_base_branch, resolve_worktree_dir,
 };
@@ -124,7 +124,16 @@ fn build_prompt(source: &Source) -> Option<String> {
 }
 
 fn resolve_source(args: &Args) -> Result<Source> {
-    match args.ticket_id.as_deref() {
+    match args.ticket_input().as_deref() {
+        Some(raw) if looks_like_sentence(raw) => {
+            let token = auth::resolve_token()?;
+            let linear = Client::new(token);
+            Ok(Source::Linear(create_new_ticket(
+                &linear,
+                args.team.as_deref(),
+                Some(raw.trim()),
+            )?))
+        }
         Some(raw) if github::is_pr_url(raw) => Ok(Source::GitHubPr(github::fetch_pr(raw.trim())?)),
         Some(raw) if !is_linear_url(raw) && !looks_like_linear_ticket(raw) => {
             Ok(Source::Branch(raw.trim().to_string()))

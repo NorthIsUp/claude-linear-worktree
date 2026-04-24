@@ -7,11 +7,13 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(name = "claude-lwt", version, about)]
 pub struct Args {
-    /// Linear ticket identifier (e.g. ABC-123), Linear issue URL
-    /// (e.g. https://linear.app/acme/issue/ABC-123/slug), or GitHub PR URL
-    /// (e.g. https://github.com/owner/repo/pull/123). If omitted, a new
-    /// Linear ticket is created.
-    pub ticket_id: Option<String>,
+    /// One of: Linear ticket id (`ABC-123`), Linear issue URL, GitHub PR URL,
+    /// a git branch name, or — if multiple words / contains whitespace — a
+    /// short description that becomes the title of a newly created Linear
+    /// ticket (e.g. `clw we need to speed the thing up`).
+    /// If omitted entirely, prompts interactively for a new ticket.
+    #[arg(num_args = 0..)]
+    pub ticket_id: Vec<String>,
 
     /// Base directory for worktrees. Default: <git_root>/../<repo>.worktrees/<branch>.
     #[arg(long, env = "CLAUDE_WORKTREE_DIR")]
@@ -51,6 +53,22 @@ impl Args {
     {
         <Self as Parser>::parse_from(it)
     }
+
+    /// Join the positional tokens back into a single string. Returns `None`
+    /// when no positional was supplied.
+    pub fn ticket_input(&self) -> Option<String> {
+        if self.ticket_id.is_empty() {
+            None
+        } else {
+            Some(self.ticket_id.join(" "))
+        }
+    }
+}
+
+/// True when `s` contains inner whitespace after trimming — i.e. it's a
+/// multi-word description rather than a branch/id/URL token.
+pub fn looks_like_sentence(s: &str) -> bool {
+    s.trim().contains(char::is_whitespace)
 }
 
 pub fn normalize_ticket_id(raw: &str) -> String {
