@@ -68,11 +68,7 @@ fn main() -> Result<()> {
     launch_claude(&worktree_dir, &source, &args.claude_args)
 }
 
-fn emit_shell_launch(
-    worktree_dir: &std::path::Path,
-    source: &Source,
-    passthrough: &[String],
-) {
+fn emit_shell_launch(worktree_dir: &std::path::Path, source: &Source, passthrough: &[String]) {
     let prompt = build_prompt(source);
     let mut claude_cmd = String::from("exec claude");
     for a in passthrough {

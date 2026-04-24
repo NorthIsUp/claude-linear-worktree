@@ -74,9 +74,7 @@ pub fn run(argv: &[std::ffi::OsString]) -> Result<()> {
 
     let shell_src = shell_arg
         .or_else(|| std::env::var("SHELL").ok())
-        .ok_or_else(|| {
-            anyhow::anyhow!("pass --shell <bash|zsh> (or set $SHELL)")
-        })?;
+        .ok_or_else(|| anyhow::anyhow!("pass --shell <bash|zsh> (or set $SHELL)"))?;
     let shell = Shell::parse(&shell_src)?;
 
     let bin = std::env::current_exe()?;
