@@ -1,11 +1,80 @@
 name: Release
 
+# Two ways to release:
+#   1. Push a `v*` tag manually — builds and publishes that tag.
+#   2. Land a commit on `main` that bumps `Cargo.toml`'s version to a value with
+#      no matching `v<version>` tag yet — the workflow tags it and releases.
+#
+# Tags pushed by GITHUB_TOKEN don't re-trigger workflows, so the build/release
+# for an auto-tag happens in the same run as the tag creation.
+
 on:
   push:
+    branches: [main]
     tags: ["v*"]
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_release: ${{ steps.decide.outputs.should_release }}
+      version: ${{ steps.decide.outputs.version }}
+      tag: ${{ steps.decide.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide whether to release
+        id: decide
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            version="${tag#v}"
+            should="true"
+          else
+            version=$(grep -m1 '^version' Cargo.toml | sed -E 's/^version *= *"([^"]+)".*/\1/')
+            tag="v${version}"
+            if git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
+              echo "::notice::Tag ${tag} already exists; nothing to release."
+              should="false"
+            else
+              echo "::notice::No tag ${tag} yet; will tag + release."
+              should="true"
+            fi
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "should_release=${should}" >> "$GITHUB_OUTPUT"
+
+  tag:
+    needs: setup
+    if: needs.setup.outputs.should_release == 'true' && startsWith(github.ref, 'refs/heads/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create and push tag
+        env:
+          TAG: ${{ needs.setup.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
   build:
+    needs: [setup, tag]
+    if: |
+      needs.setup.outputs.should_release == 'true' &&
+      (needs.tag.result == 'success' || needs.tag.result == 'skipped')
     strategy:
       matrix:
         include:
@@ -68,7 +137,10 @@ jobs:
           path: ${{ matrix.artifact }}.tar.gz
 
   release:
-    needs: build
+    needs: [setup, tag, build]
+    if: |
+      needs.setup.outputs.should_release == 'true' &&
+      (needs.tag.result == 'success' || needs.tag.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -90,6 +162,8 @@ jobs:
 
       - name: Extract changelog section
         id: changelog
+        env:
+          VERSION: ${{ needs.setup.outputs.version }}
         run: |
           if [ ! -f CHANGELOG.md ]; then
             echo "No CHANGELOG.md; skipping release notes extraction"
@@ -98,30 +172,30 @@ jobs:
               echo ''
               echo 'EOF'
             } >> "$GITHUB_OUTPUT"
+            echo "has_notes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          version="${GITHUB_REF#refs/tags/v}"
-          # Extract the [version] section from CHANGELOG.md (stops at next ## heading).
-          notes=$(awk -v v="$version" '
+          notes=$(awk -v v="$VERSION" '
             $0 ~ "^## \\[" v "\\]" { flag=1; next }
             flag && /^## \[/ { exit }
             flag { print }
           ' CHANGELOG.md)
           if [ -z "$notes" ]; then
-            echo "No changelog entry found for v${version}; using auto-generated notes only."
-            echo "has_notes=false" >> $GITHUB_OUTPUT
+            echo "No changelog entry found for v${VERSION}; using auto-generated notes only."
+            echo "has_notes=false" >> "$GITHUB_OUTPUT"
           else
             {
               echo 'notes<<CHANGELOG_EOF'
               echo "$notes"
               echo 'CHANGELOG_EOF'
-            } >> $GITHUB_OUTPUT
-            echo "has_notes=true" >> $GITHUB_OUTPUT
+            } >> "$GITHUB_OUTPUT"
+            echo "has_notes=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.setup.outputs.tag }}
           body: ${{ steps.changelog.outputs.has_notes == 'true' && steps.changelog.outputs.notes || '' }}
           generate_release_notes: true
           files: |
