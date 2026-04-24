@@ -33,20 +33,20 @@ pub fn render_function(shell: Shell, binary: &Path) -> String {
     let bin = sh_quote(&binary.display().to_string());
     let _ = shell; // bash/zsh share syntax here
     format!(
-        r#"clt() {{
+        r#"clw() {{
   if [ "$1" = "activate" ]; then
     command {bin} activate "$@"
     return
   fi
-  local __clt_out
-  __clt_out=$(command {bin} --emit-shell "$@") || return $?
-  eval "$__clt_out"
+  local __clw_out
+  __clw_out=$(command {bin} --emit-shell "$@") || return $?
+  eval "$__clw_out"
 }}
 "#
     )
 }
 
-/// Handle `clt activate [--shell <name>]` and print the function to stdout.
+/// Handle `clw activate [--shell <name>]` and print the function to stdout.
 pub fn run(argv: &[std::ffi::OsString]) -> Result<()> {
     let mut shell_arg: Option<String> = None;
     let mut i = 0;
@@ -84,9 +84,9 @@ pub fn run(argv: &[std::ffi::OsString]) -> Result<()> {
 
 fn print_help() {
     eprintln!(
-        "Usage: clt activate --shell <bash|zsh>\n\n\
+        "Usage: clw activate --shell <bash|zsh>\n\n\
          Prints a shell function to stdout. Add to your shell config:\n\n  \
-         eval \"$(clt activate --shell $SHELL)\"\n"
+         eval \"$(clw activate --shell $SHELL)\"\n"
     );
 }
 
@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn renders_function_with_binary_path() {
         let out = render_function(Shell::Bash, &PathBuf::from("/usr/local/bin/claude-lwt"));
-        assert!(out.contains("clt()"));
+        assert!(out.contains("clw()"));
         assert!(out.contains("'/usr/local/bin/claude-lwt'"));
         assert!(out.contains("--emit-shell"));
         assert!(out.contains("activate"));

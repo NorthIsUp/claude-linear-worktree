@@ -34,7 +34,7 @@ pub struct Args {
     pub no_exec: bool,
 
     /// Instead of exec'ing claude, print shell commands (cd + exec claude)
-    /// to stdout for a wrapper shell function to eval. See `clt activate`.
+    /// to stdout for a wrapper shell function to eval. See `clw activate`.
     #[arg(long, hide = true)]
     pub emit_shell: bool,
 

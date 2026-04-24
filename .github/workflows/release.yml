@@ -59,7 +59,7 @@ jobs:
           ARCHIVE_DIR="${{ matrix.artifact }}"
           mkdir -p "$ARCHIVE_DIR"
           cp target/${{ matrix.target }}/release/claude-lwt "$ARCHIVE_DIR/claude-lwt"
-          ln -sf claude-lwt "$ARCHIVE_DIR/clt"
+          ln -sf claude-lwt "$ARCHIVE_DIR/clw"
           tar czf "$ARCHIVE_DIR.tar.gz" -C "$ARCHIVE_DIR" .
 
       - uses: actions/upload-artifact@v4

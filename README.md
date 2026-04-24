@@ -6,27 +6,27 @@ Launch Claude Code in a git worktree for a Linear ticket.
 
 ```bash
 cargo install --git https://github.com/NorthIsUp/claude-linear-worktree
-ln -sf "$(which claude-lwt)" ~/.local/bin/clt
+ln -sf "$(which claude-lwt)" ~/.local/bin/clw
 ```
 
 Or download a release tarball from
 https://github.com/NorthIsUp/claude-linear-worktree/releases — the tarball
-includes a `clt` symlink.
+includes a `clw` symlink.
 
 ## Usage
 
 ```bash
 # Work on an existing ticket
-clt ABC-123
+clw ABC-123
 
 # Resume work on a GitHub PR (uses the PR head branch for the worktree)
-clt https://github.com/owner/repo/pull/123
+clw https://github.com/owner/repo/pull/123
 
 # Start a new feature — prompts for title, creates Linear ticket, launches claude
-clt
+clw
 
 # Pass extra flags to claude
-clt ABC-123 -- --model opus --resume
+clw ABC-123 -- --model opus --resume
 ```
 
 PR mode requires the `gh` CLI to be installed and authenticated. It does not
@@ -35,12 +35,12 @@ require `LINEAR_TOKEN`.
 ## Shell activation
 
 By default the binary execs `claude` directly, which can't change the parent
-shell's working directory. Install the `clt` shell function if you want your
+shell's working directory. Install the `clw` shell function if you want your
 shell to land inside the worktree when claude exits:
 
 ```bash
 # bash/zsh — add to ~/.bashrc or ~/.zshrc
-eval "$(clt activate --shell $SHELL)"
+eval "$(clw activate --shell $SHELL)"
 ```
 
 The function runs the real binary with `--emit-shell`, then `eval`s its
