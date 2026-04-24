@@ -22,6 +22,12 @@ clw ABC-123
 # Resume work on a GitHub PR (uses the PR head branch for the worktree)
 clw https://github.com/owner/repo/pull/123
 
+# Attach to / create a worktree for a specific branch
+clw adam/cla-1005-async-more-things-middleware
+
+# Create a new ticket from a one-liner — no prompt, no quotes needed
+clw we need to speed the thing up
+
 # Start a new feature — prompts for title, creates Linear ticket, launches claude
 clw
 
