@@ -20,9 +20,13 @@ pub fn pr_initial_prompt(ctx: &PrContext<'_>) -> String {
             "You are continuing work on GitHub PR #{num}: \"{title}\"\n\
              URL: {url}\n\
              \n\
-             The PR branch is checked out in this worktree. Read the PR body,\n\
-             review the existing diff against the base branch, and continue\n\
-             the work. Leave comments on the PR as progress updates.",
+             The PR branch is checked out in this worktree. Read the PR body and\n\
+             review the existing diff against the base branch.\n\
+             \n\
+             Put your remaining-work plan in the PR description as a markdown\n\
+             checklist (`- [ ]` items). As each item is finished, edit the PR\n\
+             description to mark it `- [x]`. Update frequently — the user is\n\
+             watching the PR live and uses the checklist to follow progress.",
             num = ctx.number,
             title = ctx.title,
             url = ctx.url,
@@ -32,9 +36,12 @@ pub fn pr_initial_prompt(ctx: &PrContext<'_>) -> String {
             "You are continuing work on GitHub PR #{num}: \"{title}\"\n\
              URL: {url}\n\
              \n\
-             The PR has no description yet. Review the existing diff against\n\
-             the base branch to understand what's been done, then continue\n\
-             the work and leave PR comments as progress updates.",
+             The PR has no description yet. Review the existing diff against the\n\
+             base branch to understand what's been done, then write the plan for\n\
+             remaining work into the PR description as a markdown checklist\n\
+             (`- [ ]` items). As each item is finished, edit the PR description\n\
+             to mark it `- [x]`. Update frequently — the user is watching the\n\
+             PR live and uses the checklist to follow progress.",
             num = ctx.number,
             title = ctx.title,
             url = ctx.url,
@@ -48,8 +55,11 @@ pub fn initial_prompt(ctx: &TicketContext<'_>) -> String {
             "You are working on Linear ticket {id}: \"{title}\"\n\
              URL: {url}\n\
              \n\
-             Pull context from the ticket and make a plan. Frequently leave\n\
-             comments on the ticket as updates on your progress.",
+             Pull context from the ticket and make a plan. Put the plan in the\n\
+             Linear ticket description as a markdown checklist (`- [ ]` items).\n\
+             As each item is finished, edit the ticket to mark it `- [x]`.\n\
+             Update frequently — the user is watching the ticket live and uses\n\
+             the checklist to follow progress.",
             id = ctx.identifier,
             title = ctx.title,
             url = ctx.url,
@@ -60,8 +70,10 @@ pub fn initial_prompt(ctx: &TicketContext<'_>) -> String {
              URL: {url}\n\
              \n\
              This ticket has no body yet, so there is no prior context to read.\n\
-             Start planning the work and frequently update the ticket with\n\
-             comments as the plan evolves and you make progress.",
+             Plan the work, then put the plan in the ticket description as a\n\
+             markdown checklist (`- [ ]` items). As each item is finished, edit\n\
+             the ticket to mark it `- [x]`. Update frequently — the user is\n\
+             watching the ticket live and uses the checklist to follow progress.",
             id = ctx.identifier,
             title = ctx.title,
             url = ctx.url,
@@ -72,6 +84,12 @@ pub fn initial_prompt(ctx: &TicketContext<'_>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_live_checklist_instruction(p: &str) {
+        assert!(p.contains("`- [ ]`"), "missing unchecked checklist marker");
+        assert!(p.contains("`- [x]`"), "missing checked checklist marker");
+        assert!(p.contains("watching"), "missing live-progress framing");
+    }
 
     #[test]
     fn renders_context_prompt_when_body_present() {
@@ -85,6 +103,7 @@ mod tests {
         assert!(p.contains("Fix login"));
         assert!(p.contains("https://linear.app/x/issue/ABC-123"));
         assert!(p.contains("Pull context"));
+        assert_live_checklist_instruction(&p);
     }
 
     #[test]
@@ -98,6 +117,7 @@ mod tests {
         assert!(p.contains("starting work on a new Linear feature"));
         assert!(p.contains("no body yet"));
         assert!(!p.contains("Pull context"));
+        assert_live_checklist_instruction(&p);
     }
 
     #[test]
@@ -109,5 +129,32 @@ mod tests {
             has_context: true,
         });
         assert!(p.contains("\"Do the thing\""));
+    }
+
+    #[test]
+    fn pr_prompt_with_body_includes_checklist_instruction() {
+        let p = pr_initial_prompt(&PrContext {
+            number: 42,
+            title: "Refactor X",
+            url: "https://github.com/o/r/pull/42",
+            has_context: true,
+        });
+        assert!(p.contains("PR #42"));
+        assert!(p.contains("Refactor X"));
+        assert!(p.contains("PR description"));
+        assert_live_checklist_instruction(&p);
+    }
+
+    #[test]
+    fn pr_prompt_without_body_includes_checklist_instruction() {
+        let p = pr_initial_prompt(&PrContext {
+            number: 7,
+            title: "WIP",
+            url: "u",
+            has_context: false,
+        });
+        assert!(p.contains("no description yet"));
+        assert!(p.contains("PR description"));
+        assert_live_checklist_instruction(&p);
     }
 }
