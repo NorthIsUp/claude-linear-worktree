@@ -35,8 +35,9 @@ clw
 clw ABC-123 -- --model opus --resume
 ```
 
-PR mode requires the `gh` CLI to be installed and authenticated. It does not
-require `LINEAR_TOKEN`.
+PR mode calls the GitHub REST API directly and needs `GITHUB_TOKEN` (or
+`GH_TOKEN`) set to a token that can read the PR. It does not require
+`LINEAR_TOKEN` and does not shell out to the `gh` CLI.
 
 ## Shell activation
 
@@ -54,9 +55,15 @@ The function runs the real binary with `--emit-shell`, then `eval`s its
 
 ## Environment
 
-- `LINEAR_TOKEN` — required. Create one at
+- `LINEAR_TOKEN` — required for Linear flows (existing-ticket lookup or new-
+  ticket creation). Create one at
   https://linear.app/settings/account/security.
 - `LINEAR_TEAM_ID` — optional default Linear team for new tickets.
+- `GITHUB_TOKEN` (or `GH_TOKEN`) — required for PR-URL mode. A classic PAT or
+  fine-grained token with `repo` read access. If you already use `gh`, the
+  shortest setup is `export GITHUB_TOKEN=$(gh auth token)`. SAML-protected
+  orgs require the token to be authorized at
+  `https://github.com/orgs/<org>/sso`.
 - `CLAUDE_WORKTREE_DIR` — optional override of the worktree base path.
 
 ## How it works
