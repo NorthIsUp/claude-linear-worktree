@@ -55,11 +55,14 @@ pub fn initial_prompt(ctx: &TicketContext<'_>) -> String {
             "You are working on Linear ticket {id}: \"{title}\"\n\
              URL: {url}\n\
              \n\
-             Pull context from the ticket and make a plan. Put the plan in the\n\
-             Linear ticket description as a markdown checklist (`- [ ]` items).\n\
-             As each item is finished, edit the ticket to mark it `- [x]`.\n\
-             Update frequently — the user is watching the ticket live and uses\n\
-             the checklist to follow progress.",
+             Pull context from the ticket and make a plan. Also check the\n\
+             ticket's parent and child tickets for additional context — they\n\
+             often hold the surrounding scope and constraints.\n\
+             \n\
+             Put the plan in the Linear ticket description as a markdown\n\
+             checklist (`- [ ]` items). As each item is finished, edit the\n\
+             ticket to mark it `- [x]`. Update frequently — the user is\n\
+             watching the ticket live and uses the checklist to follow progress.",
             id = ctx.identifier,
             title = ctx.title,
             url = ctx.url,
@@ -69,11 +72,16 @@ pub fn initial_prompt(ctx: &TicketContext<'_>) -> String {
             "You are starting work on a new Linear feature, ticket {id}: \"{title}\"\n\
              URL: {url}\n\
              \n\
-             This ticket has no body yet, so there is no prior context to read.\n\
+             This ticket has no body yet, so there is no prior context on the\n\
+             ticket itself. Check the ticket's parent and child tickets for\n\
+             additional context — they often hold the surrounding scope and\n\
+             constraints.\n\
+             \n\
              Plan the work, then put the plan in the ticket description as a\n\
-             markdown checklist (`- [ ]` items). As each item is finished, edit\n\
-             the ticket to mark it `- [x]`. Update frequently — the user is\n\
-             watching the ticket live and uses the checklist to follow progress.",
+             markdown checklist (`- [ ]` items). As each item is finished,\n\
+             edit the ticket to mark it `- [x]`. Update frequently — the user\n\
+             is watching the ticket live and uses the checklist to follow\n\
+             progress.",
             id = ctx.identifier,
             title = ctx.title,
             url = ctx.url,
@@ -91,6 +99,13 @@ mod tests {
         assert!(p.contains("watching"), "missing live-progress framing");
     }
 
+    fn assert_parent_child_instruction(p: &str) {
+        assert!(
+            p.contains("parent and child tickets"),
+            "missing parent/child context instruction"
+        );
+    }
+
     #[test]
     fn renders_context_prompt_when_body_present() {
         let p = initial_prompt(&TicketContext {
@@ -104,6 +119,7 @@ mod tests {
         assert!(p.contains("https://linear.app/x/issue/ABC-123"));
         assert!(p.contains("Pull context"));
         assert_live_checklist_instruction(&p);
+        assert_parent_child_instruction(&p);
     }
 
     #[test]
@@ -118,6 +134,7 @@ mod tests {
         assert!(p.contains("no body yet"));
         assert!(!p.contains("Pull context"));
         assert_live_checklist_instruction(&p);
+        assert_parent_child_instruction(&p);
     }
 
     #[test]
