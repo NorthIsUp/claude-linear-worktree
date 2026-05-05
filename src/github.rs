@@ -13,11 +13,16 @@ pub struct PrInfo {
 
 const USER_AGENT: &str = concat!("claude-lwt/", env!("CARGO_PKG_VERSION"));
 
-/// True if `s` looks like a GitHub PR URL (e.g. https://github.com/owner/repo/pull/123).
+/// True if `s` looks like a PR URL we know how to handle: a GitHub PR
+/// (`https://github.com/<owner>/<repo>/pull/<n>`) or a Graphite PR view
+/// (`https://app.graphite.com/github/pr/<owner>/<repo>/<n>`).
 pub fn is_pr_url(s: &str) -> bool {
     let s = s.trim();
-    (s.starts_with("https://github.com/") || s.starts_with("http://github.com/"))
-        && s.contains("/pull/")
+    let github = (s.starts_with("https://github.com/") || s.starts_with("http://github.com/"))
+        && s.contains("/pull/");
+    let graphite = s.starts_with("https://app.graphite.com/github/pr/")
+        || s.starts_with("http://app.graphite.com/github/pr/");
+    github || graphite
 }
 
 /// Fetch a PR's metadata from the GitHub REST API.
@@ -69,13 +74,35 @@ pub fn fetch_pr(url: &str) -> Result<PrInfo> {
     })
 }
 
-/// Pull `(owner, repo, number)` out of a GitHub PR URL.
+/// Pull `(owner, repo, number)` out of a PR URL — accepts both GitHub
+/// (`/<owner>/<repo>/pull/<n>`) and Graphite (`/github/pr/<owner>/<repo>/<n>`)
+/// shapes. Trailing path segments, query strings, and `#fragments` are
+/// tolerated (Graphite deep-links into a file with `#file-...`).
 fn parse_pr_url(url: &str) -> Result<(&str, &str, u64)> {
     let trimmed = url.trim();
+
+    if let Some(rest) = trimmed
+        .strip_prefix("https://app.graphite.com/github/pr/")
+        .or_else(|| trimmed.strip_prefix("http://app.graphite.com/github/pr/"))
+    {
+        let mut parts = rest.split('/');
+        let owner = parts.next().filter(|s| !s.is_empty());
+        let repo = parts.next().filter(|s| !s.is_empty());
+        let number_seg = parts.next();
+        return match (owner, repo, number_seg) {
+            (Some(owner), Some(repo), Some(num)) => {
+                Ok((owner, repo, parse_pr_number(num)?))
+            }
+            _ => bail!(
+                "expected https://app.graphite.com/github/pr/<owner>/<repo>/<number>: {trimmed}"
+            ),
+        };
+    }
+
     let rest = trimmed
         .strip_prefix("https://github.com/")
         .or_else(|| trimmed.strip_prefix("http://github.com/"))
-        .ok_or_else(|| anyhow!("not a GitHub URL: {trimmed}"))?;
+        .ok_or_else(|| anyhow!("not a GitHub or Graphite PR URL: {trimmed}"))?;
 
     let mut parts = rest.split('/');
     let owner = parts.next().filter(|s| !s.is_empty());
@@ -85,16 +112,19 @@ fn parse_pr_url(url: &str) -> Result<(&str, &str, u64)> {
 
     match (owner, repo, pull, number_seg) {
         (Some(owner), Some(repo), Some("pull"), Some(num)) => {
-            let number: u64 = num
-                .split(['?', '#'])
-                .next()
-                .unwrap_or(num)
-                .parse()
-                .with_context(|| format!("PR number '{num}' is not a positive integer"))?;
-            Ok((owner, repo, number))
+            Ok((owner, repo, parse_pr_number(num)?))
         }
         _ => bail!("expected https://github.com/<owner>/<repo>/pull/<number>: {trimmed}"),
     }
+}
+
+/// Parse the `<number>` segment of a PR URL, dropping anything after `?` or `#`
+/// (e.g. Graphite's `#file-backend/...` deep-link).
+fn parse_pr_number(num: &str) -> Result<u64> {
+    let cleaned = num.split(['?', '#']).next().unwrap_or(num);
+    cleaned
+        .parse()
+        .with_context(|| format!("PR number '{num}' is not a positive integer"))
 }
 
 /// Read a GitHub token. Prefers `GITHUB_TOKEN`, falls back to `GH_TOKEN`.
@@ -179,6 +209,41 @@ mod tests {
     #[test]
     fn rejects_non_github_host() {
         assert!(!is_pr_url("https://gitlab.com/owner/repo/pull/1"));
+    }
+
+    #[test]
+    fn detects_graphite_pr_url() {
+        assert!(is_pr_url(
+            "https://app.graphite.com/github/pr/teamclara/Clara_V1/821"
+        ));
+    }
+
+    #[test]
+    fn detects_graphite_pr_url_with_file_anchor() {
+        assert!(is_pr_url(
+            "https://app.graphite.com/github/pr/teamclara/Clara_V1/821#file-backend/labs/api/serializers.py"
+        ));
+    }
+
+    #[test]
+    fn rejects_graphite_non_pr_url() {
+        assert!(!is_pr_url("https://app.graphite.com/dashboard"));
+    }
+
+    #[test]
+    fn parses_graphite_pr_url() {
+        let (o, r, n) =
+            parse_pr_url("https://app.graphite.com/github/pr/teamclara/Clara_V1/821").unwrap();
+        assert_eq!((o, r, n), ("teamclara", "Clara_V1", 821));
+    }
+
+    #[test]
+    fn parses_graphite_pr_url_with_file_anchor() {
+        let (o, r, n) = parse_pr_url(
+            "https://app.graphite.com/github/pr/teamclara/Clara_V1/821#file-backend/labs/api/serializers.py",
+        )
+        .unwrap();
+        assert_eq!((o, r, n), ("teamclara", "Clara_V1", 821));
     }
 
     #[test]

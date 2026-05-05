@@ -22,6 +22,9 @@ clw ABC-123
 # Resume work on a GitHub PR (uses the PR head branch for the worktree)
 clw https://github.com/owner/repo/pull/123
 
+# Same, from a Graphite PR view (file anchors / query strings tolerated)
+clw https://app.graphite.com/github/pr/owner/repo/123
+
 # Attach to / create a worktree for a specific branch
 clw adam/cla-1005-async-more-things-middleware
 
