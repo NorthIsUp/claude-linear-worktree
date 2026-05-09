@@ -57,8 +57,13 @@ fn main() -> Result<()> {
     )?;
     eprintln!("worktree ready: {} ({:?})", worktree_dir.display(), setup);
 
-    if args.no_exec {
-        eprintln!("--no-exec set; stopping before claude launch");
+    if args.print_worktree {
+        println!("{}", worktree_dir.display());
+        return Ok(());
+    }
+
+    if args.no_claude {
+        eprintln!("--no-claude set; stopping before claude launch");
         if args.emit_shell {
             println!("cd {}", sh_quote(&worktree_dir.display().to_string()));
         }

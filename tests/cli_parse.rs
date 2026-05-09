@@ -6,7 +6,8 @@ fn parses_ticket_id_only() {
     assert_eq!(a.ticket_input().as_deref(), Some("ABC-123"));
     assert!(a.claude_args.is_empty());
     assert_eq!(a.base, "main");
-    assert!(!a.no_exec);
+    assert!(!a.no_claude);
+    assert!(!a.print_worktree);
 }
 
 #[test]
@@ -22,14 +23,28 @@ fn flags_parsed_before_double_dash() {
         "claude-lwt",
         "--base",
         "develop",
-        "--no-exec",
+        "--no-claude",
         "ABC-1",
         "--",
         "--resume",
     ]);
     assert_eq!(a.base, "develop");
-    assert!(a.no_exec);
+    assert!(a.no_claude);
     assert_eq!(a.claude_args, vec!["--resume"]);
+}
+
+#[test]
+fn no_exec_is_alias_of_no_claude() {
+    let a = Args::parse_from(["claude-lwt", "--no-exec", "ABC-1"]);
+    assert!(a.no_claude);
+}
+
+#[test]
+fn print_worktree_flag() {
+    let a = Args::parse_from(["claude-lwt", "--print-worktree", "ABC-1"]);
+    assert!(a.print_worktree);
+    assert!(!a.no_claude);
+    assert_eq!(a.ticket_input().as_deref(), Some("ABC-1"));
 }
 
 #[test]

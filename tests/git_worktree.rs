@@ -65,6 +65,49 @@ fn creates_new_branch_worktree_off_base() {
 }
 
 #[test]
+fn sets_upstream_config_for_new_branch_even_without_remote() {
+    let td = init_repo_with_commit();
+    let wt_dir = td
+        .path()
+        .parent()
+        .unwrap()
+        .join(format!(
+            "{}.worktrees",
+            td.path().file_name().unwrap().to_string_lossy()
+        ))
+        .join("feature-upstream");
+
+    ensure_worktree(td.path(), "feature-upstream", "main", &wt_dir).unwrap();
+
+    let remote = Command::new("git")
+        .args(["config", "--get", "branch.feature-upstream.remote"])
+        .current_dir(td.path())
+        .output()
+        .unwrap();
+    assert!(remote.status.success(), "remote config not set");
+    assert_eq!(
+        String::from_utf8_lossy(&remote.stdout).trim(),
+        "origin"
+    );
+
+    let merge = Command::new("git")
+        .args(["config", "--get", "branch.feature-upstream.merge"])
+        .current_dir(td.path())
+        .output()
+        .unwrap();
+    assert!(merge.status.success(), "merge config not set");
+    assert_eq!(
+        String::from_utf8_lossy(&merge.stdout).trim(),
+        "refs/heads/feature-upstream"
+    );
+
+    let _ = Command::new("git")
+        .args(["worktree", "remove", "--force", wt_dir.to_str().unwrap()])
+        .current_dir(td.path())
+        .status();
+}
+
+#[test]
 fn reuses_existing_worktree_if_path_is_same_branch() {
     let td = init_repo_with_commit();
     let wt_dir = td

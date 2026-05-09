@@ -34,6 +34,12 @@ clw we need to speed the thing up
 # Start a new feature — prompts for title, creates Linear ticket, launches claude
 clw
 
+# Set up the worktree, cd into it, but don't launch claude
+clw --no-claude ABC-123
+
+# Just print the worktree path (e.g. for scripting / shell substitution)
+cd "$(clw --print-worktree ABC-123)"
+
 # Pass extra flags to claude
 clw ABC-123 -- --model opus --resume
 ```
@@ -46,15 +52,24 @@ PR mode calls the GitHub REST API directly and needs `GITHUB_TOKEN` (or
 
 By default the binary execs `claude` directly, which can't change the parent
 shell's working directory. Install the `clw` shell function if you want your
-shell to land inside the worktree when claude exits:
+shell to land inside the worktree (with or without claude):
 
 ```bash
 # bash/zsh — add to ~/.bashrc or ~/.zshrc
-eval "$(clw activate --shell $SHELL)"
+eval "$(clw activate $SHELL)"      # positional form
+eval "$(clw activate --shell zsh)" # equivalent
 ```
 
-The function runs the real binary with `--emit-shell`, then `eval`s its
-`cd … && exec claude …` output.
+The function:
+
+* `clw <args>` — runs the binary with `--emit-shell` and `eval`s its
+  `cd <worktree> && exec claude …` output, so the parent shell ends up inside
+  the worktree under `claude`.
+* `clw --no-claude <args>` — same setup, but the eval'd output is just `cd
+  <worktree>`, leaving you in the worktree without launching claude.
+* `clw --print-worktree <args>` — bypasses `--emit-shell` and prints just the
+  worktree path, so it composes with command substitution
+  (`cd "$(clw --print-worktree ABC-123)"`).
 
 ## Environment
 

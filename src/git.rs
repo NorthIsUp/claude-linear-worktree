@@ -120,16 +120,15 @@ pub fn ensure_worktree(
 
     let commit = repo.find_commit(target_oid)?;
 
-    let mut branch = match repo.find_branch(branch_name, BranchType::Local) {
+    let branch = match repo.find_branch(branch_name, BranchType::Local) {
         Ok(b) => b,
         Err(_) => repo.branch(branch_name, &commit, false)?,
     };
-    if remote_has_branch {
-        let upstream = format!("origin/{branch_name}");
-        if let Err(e) = branch.set_upstream(Some(&upstream)) {
-            eprintln!("warning: failed to set upstream to {upstream}: {e}");
-        }
-    }
+    // Configure upstream tracking against `origin/<branch_name>` unconditionally:
+    // when the remote branch already exists this matches what `set_upstream`
+    // would do; when it doesn't exist yet, writing the config directly preconfigures
+    // the eventual `git push` and makes `git pull` work without manual setup.
+    set_upstream_to_origin(&repo, branch_name)?;
     let branch_ref = branch.into_reference();
 
     let mut opts = WorktreeAddOptions::new();
@@ -143,6 +142,25 @@ pub fn ensure_worktree(
         WorktreeSetup::CreatedNewBranch
     };
     Ok((worktree_path.to_path_buf(), setup))
+}
+
+/// Set the local branch's upstream to `origin/<branch_name>` by writing the
+/// config keys directly. This works whether or not the remote branch already
+/// exists — `git2::Branch::set_upstream` requires the remote ref to be
+/// present, but we want pre-configured tracking for fresh branches too so
+/// `git push -u` isn't required and a later `git pull` works on the first try.
+fn set_upstream_to_origin(repo: &Repository, branch_name: &str) -> Result<()> {
+    let mut config = repo.config().context("failed to open git config")?;
+    config
+        .set_str(&format!("branch.{branch_name}.remote"), "origin")
+        .with_context(|| format!("failed to set branch.{branch_name}.remote"))?;
+    config
+        .set_str(
+            &format!("branch.{branch_name}.merge"),
+            &format!("refs/heads/{branch_name}"),
+        )
+        .with_context(|| format!("failed to set branch.{branch_name}.merge"))?;
+    Ok(())
 }
 
 fn fetch_and_check_remote_branch(repo: &Repository, branch_name: &str) -> Result<bool> {

@@ -31,9 +31,16 @@ pub struct Args {
     #[arg(long)]
     pub title: Option<String>,
 
-    /// Set up the worktree but do not exec `claude`.
+    /// Set up the worktree (and cd into it via the shell wrapper) but do not
+    /// exec `claude`. `--no-exec` is accepted as a backward-compatible alias.
+    #[arg(long, alias = "no-exec")]
+    pub no_claude: bool,
+
+    /// Print the worktree path to stdout and exit. Skips both `claude` and
+    /// `--emit-shell` output, so it's safe to use in command substitution
+    /// (e.g. `cd "$(clw --print-worktree ABC-123)"`).
     #[arg(long)]
-    pub no_exec: bool,
+    pub print_worktree: bool,
 
     /// Instead of exec'ing claude, print shell commands (cd + exec claude)
     /// to stdout for a wrapper shell function to eval. See `clw activate`.
