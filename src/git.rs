@@ -71,14 +71,17 @@ pub fn discover_git_root(start_dir: &Path) -> Result<PathBuf> {
 /// Create or reuse a worktree for `branch_name`.
 ///
 /// Resolution order:
-///   1. If any worktree is already registered for `branch_name` (at any path),
+///   1. Drop stale `.git/worktrees/*` entries (e.g. directories deleted
+///      out-of-band) so subsequent lookups see a consistent view.
+///   2. If any worktree is already registered for `branch_name` (at any path),
 ///      reuse it — the returned path is that worktree's path, which may differ
 ///      from `worktree_path`.
-///   2. If `worktree_path` exists on disk but isn't a worktree for this branch,
-///      bail.
-///   3. Otherwise, create a new worktree at `worktree_path`, tracking
-///      `origin/<branch_name>` if the remote has it, else a new branch off
-///      `base_branch`.
+///   3. If `worktree_path` exists on disk:
+///        - If it's an orphaned worktree directory (its `.git` file points at
+///          a gitdir that's been pruned), clean it up and proceed.
+///        - Otherwise bail with an explanation of what occupies the path.
+///   4. Create a new worktree at `worktree_path`, tracking `origin/<branch_name>`
+///      if the remote has it, else a new branch off `base_branch`.
 pub fn ensure_worktree(
     git_root: &Path,
     branch_name: &str,
@@ -88,15 +91,25 @@ pub fn ensure_worktree(
     let repo = Repository::open(git_root)
         .with_context(|| format!("failed to open repo at {}", git_root.display()))?;
 
+    prune_stale_worktrees(&repo);
+
     if let Some(existing) = find_worktree_for_branch(&repo, branch_name)? {
         return Ok((existing, WorktreeSetup::ReusedExisting));
     }
 
     if worktree_path.exists() {
-        anyhow::bail!(
-            "path {} exists but is not a worktree for branch {branch_name}",
-            worktree_path.display()
-        );
+        if try_clean_stale_worktree_dir(worktree_path)? {
+            eprintln!(
+                "cleaned up stale worktree directory at {}",
+                worktree_path.display()
+            );
+        } else {
+            anyhow::bail!(
+                "path {} exists but is not a worktree for branch {branch_name}.\n{}",
+                worktree_path.display(),
+                describe_path_conflict(&repo, worktree_path)
+            );
+        }
     }
 
     let remote_has_branch = fetch_and_check_remote_branch(&repo, branch_name)?;
@@ -161,6 +174,79 @@ fn set_upstream_to_origin(repo: &Repository, branch_name: &str) -> Result<()> {
         )
         .with_context(|| format!("failed to set branch.{branch_name}.merge"))?;
     Ok(())
+}
+
+/// Prune `.git/worktrees/<name>` entries whose backing directory has vanished.
+/// Best-effort: failures are ignored.
+fn prune_stale_worktrees(repo: &Repository) {
+    let Ok(names) = repo.worktrees() else {
+        return;
+    };
+    for name in names.iter().flatten() {
+        let Ok(wt) = repo.find_worktree(name) else {
+            continue;
+        };
+        let mut opts = git2::WorktreePruneOptions::new();
+        opts.working_tree(true);
+        if wt.is_prunable(Some(&mut opts)).unwrap_or(false) {
+            let _ = wt.prune(Some(&mut opts));
+        }
+    }
+}
+
+/// If `path` is an orphaned worktree directory — a `.git` *file* pointing at a
+/// gitdir that no longer exists — remove the directory and return `Ok(true)`.
+/// Returns `Ok(false)` when the path doesn't look like a recoverable orphan.
+fn try_clean_stale_worktree_dir(path: &Path) -> Result<bool> {
+    let git_link = path.join(".git");
+    let Ok(meta) = std::fs::metadata(&git_link) else {
+        return Ok(false);
+    };
+    if !meta.is_file() {
+        return Ok(false);
+    }
+    let contents = std::fs::read_to_string(&git_link)?;
+    let gitdir = contents.trim().strip_prefix("gitdir:").unwrap_or("").trim();
+    if !gitdir.is_empty() && Path::new(gitdir).exists() {
+        return Ok(false);
+    }
+    std::fs::remove_dir_all(path).with_context(|| {
+        format!(
+            "failed to clean up stale worktree directory at {}",
+            path.display()
+        )
+    })?;
+    Ok(true)
+}
+
+/// Describe what occupies `path` so the user knows what to do about a
+/// path-conflict bailout.
+fn describe_path_conflict(repo: &Repository, path: &Path) -> String {
+    let path_canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    if let Ok(names) = repo.worktrees() {
+        for name in names.iter().flatten() {
+            let Ok(wt) = repo.find_worktree(name) else {
+                continue;
+            };
+            let wt_canon = wt
+                .path()
+                .canonicalize()
+                .unwrap_or_else(|_| wt.path().to_path_buf());
+            if wt_canon == path_canon {
+                return format!(
+                    "It is already registered as worktree '{name}' \
+                     (different branch). Switch into it and `git checkout` \
+                     the branch you want, or `git worktree remove {}` and retry.",
+                    path.display(),
+                );
+            }
+        }
+    }
+    format!(
+        "Nothing is registered as a worktree for this path. If the directory \
+         is stale leftover state, remove it (`rm -rf {}`) and retry.",
+        path.display()
+    )
 }
 
 fn fetch_and_check_remote_branch(repo: &Repository, branch_name: &str) -> Result<bool> {
